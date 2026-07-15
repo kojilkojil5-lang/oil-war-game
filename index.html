@@ -8,10 +8,11 @@
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { background-color: #121214; color: #e4e4e7; font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; }
-        h1 { text-align: center; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3); }
+        .container { max-width: 950px; margin: 0 auto; }
+        .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { margin: 0; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3); font-size: 1.8rem; }
         .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .panel { background-color: #1a1a1e; border: 1px solid #2d2d34; padding: 20px; border-radius: 12px; text-align: center; }
+        .panel { background-color: #1a1a1e; border: 1px solid #2d2d34; padding: 20px; border-radius: 12px; text-align: center; position: relative; }
         .price-text { font-size: 3rem; font-weight: bold; color: #ef4444; margin: 10px 0; }
         .btn { padding: 12px 24px; font-size: 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
         .btn-us { background-color: #2563eb; color: white; }
@@ -20,13 +21,24 @@
         .btn-iran:hover { background-color: #15803d; }
         .btn-bet { background-color: #f59e0b; color: #121214; }
         .btn-bet:hover { background-color: #d97706; }
-        #news-box { height: 120px; overflow-y: auto; background-color: #0f0f11; padding: 10px; border-radius: 8px; text-align: left; font-size: 0.9rem; border: 1px solid #2d2d34; }
+        .btn-help { background-color: #3f3f46; color: #e4e4e7; padding: 8px 16px; font-size: 0.9rem; }
+        #news-box { height: 110px; overflow-y: auto; background-color: #0f0f11; padding: 10px; border-radius: 8px; text-align: left; font-size: 0.9rem; border: 1px solid #2d2d34; }
         .news-item { margin-bottom: 6px; border-bottom: 1px solid #1f1f23; padding-bottom: 4px; }
+        
+        /* 팝업 모달 스타일 */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
+        .modal-content { background-color: #1a1a1e; border: 2px solid #fbbf24; padding: 30px; border-radius: 12px; max-width: 550px; text-align: left; }
+        .close-btn { background-color: #fbbf24; color: #121214; padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; float: right; margin-top: 15px; }
+        
+        .odds-badge { background-color: #27272a; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; color: #fbbf24; border: 1px solid #3f3f46; display: inline-block; margin-top: 5px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🦅 BLACK GOLD : HORMUZ WAR</h1>
+        <div class="header-area">
+            <h1>🦅 BLACK GOLD : HORMUZ WAR</h1>
+            <button class="btn btn-help" onclick="openModal()">💡 게임 방법 설명</button>
+        </div>
         
         <div class="dashboard">
             <!-- 실시간 오일 가격판 -->
@@ -34,33 +46,58 @@
                 <h3>실시간 국제유가 (WTI)</h3>
                 <div class="price-text">$<span id="oil-price">80.00</span></div>
                 <p>지정학 긴장 지수: <span id="tension-meter" style="color:#f59e0b; font-weight:bold;">0</span>%</p>
+                <p>라운드 타임어택: <span id="round-timer" style="color:#38bdf8; font-weight:bold;">180</span>초 남음</p>
             </div>
             
-            <!-- 플레이어 금융 정보 -->
+            <!-- 플레이어 금융 정보 및 실시간 마진 거래소 -->
             <div class="panel">
                 <h3>내 헤지펀드 계좌</h3>
                 <div class="price-text" style="color: #60a5fa;">$<span id="my-balance">10,000</span></div>
-                <p>나의 베팅: <span id="my-bet-status" style="font-weight:bold; color:#fbbf24;">없음</span></p>
+                <p>배틀 참여: <span id="my-bet-status" style="font-weight:bold; color:#fbbf24;">없음</span></p>
+                <hr style="border-color:#2d2d34; margin: 10px 0;">
+                
+                <!-- 실시간 선물 마진 거래 UI -->
+                <h4>📊 3배 마진 실시간 선물 (WTI Future)</h4>
+                <div id="future-inactive">
+                    <button class="btn" style="background-color:#22c55e; color:white; padding:6px 12px; font-size:0.85rem;" onclick="openFuture('LONG')">🟢 3X 롱(상승) 진입</button>
+                    <button class="btn" style="background-color:#ef4444; color:white; padding:6px 12px; font-size:0.85rem;" onclick="openFuture('SHORT')">🔴 3X 숏(하락) 진입</button>
+                </div>
+                <div id="future-active" style="display:none;">
+                    <p style="font-size:0.9rem; margin: 5px 0;">
+                        포지션: <span id="fut-type" style="font-weight:bold;"></span> | 
+                        진입가: $<span id="fut-entry"></span> | 
+                        평가손익: <span id="fut-profit" style="font-weight:bold;">$0</span>
+                    </p>
+                    <button class="btn" style="background-color:#a1a1aa; color:#121214; padding:5px 10px; font-size:0.8rem;" onclick="closeFuture()">💰 즉시 수익 청산</button>
+                </div>
             </div>
         </div>
 
         <!-- 실시간 차트 영역 -->
         <div class="panel" style="margin-bottom: 20px;">
-            <canvas id="priceChart" style="width: 100%; height: 250px;"></canvas>
+            <canvas id="priceChart" style="width: 100%; height: 240px;"></canvas>
         </div>
 
         <!-- 정치 개입 및 예측 마켓 컨트롤러 -->
         <div class="dashboard">
             <div class="panel">
                 <h3>🌐 군사 및 외교 개입</h3>
+                <p style="font-size:0.8rem; color:#a1a1aa;">개입 시 긴장 지수가 올라 유가가 급격히 자극받습니다.</p>
                 <button class="btn btn-us" onclick="influence('US')">미국: 관세 압박 실행</button>
                 <button class="btn btn-iran" onclick="influence('IRAN')">이란: 해상 훈련 개시</button>
             </div>
             <div class="panel">
                 <h3>🗳️ 유가 $100 돌파 예측 배틀</h3>
-                <p style="font-size:0.85rem; color:#a1a1aa;">현재 풀 지분율: YES (<span id="pool-yes">1</span>) vs NO (<span id="pool-no">1</span>)</p>
-                <button class="btn btn-bet" onclick="placeBet('YES')">돌파한다 (YES) 베팅</button>
-                <button class="btn btn-bet" style="background-color:#6b7280; color:white;" onclick="placeBet('NO')">유지된다 (NO) 베팅</button>
+                <p style="font-size:0.8rem; color:#a1a1aa;">유가가 3분 내로 $100를 넘기면 YES, 안 넘으면 NO가 승리합니다.</p>
+                
+                <div style="margin-bottom: 15px;">
+                    <button class="btn btn-bet" onclick="placeBet('YES')">돌파한다 (YES) 베팅</button>
+                    <div class="odds-badge">실시간 돌파 배당: <span id="odds-yes">1.00</span>배</div>
+                </div>
+                <div>
+                    <button class="btn btn-bet" style="background-color:#6b7280; color:white;" onclick="placeBet('NO')">유지된다 (NO) 베팅</button>
+                    <div class="odds-badge" style="color:#a1a1aa;">실시간 유지 배당: <span id="odds-no">1.00</span>배</div>
+                </div>
             </div>
         </div>
 
@@ -71,10 +108,34 @@
         </div>
     </div>
 
+    <!-- 게임 도움말 모달 팝업 -->
+    <div id="helpModal" class="modal" style="display: flex;">
+        <div class="modal-content">
+            <h2>🦅 <블랙 골드> 금융 전략 전력 가이드</h2>
+            <hr style="border-color: #2d2d34; margin-bottom: 15px;">
+            <p><strong>1단계: 예측 배틀 (중장기 투자)</strong></p>
+            <ul>
+                <li>라운드 시간(180초) 안에 유가가 $100를 돌파할지(YES), 유지할지(NO)에 걸어주세요.</li>
+                <li>한쪽에 베팅이 쏠릴수록 반대쪽 배당률이 실시간으로 최대치까지 불어납니다.</li>
+            </ul>
+            <p><strong>2단계: 3배 레버리지 선물 (실시간 단타)</strong></p>
+            <ul>
+                <li>유가의 미세한 등락 흐름에 맞춰 <strong>롱(상승 베팅)</strong> 또는 <strong>숏(하락 베팅)</strong>을 쳐서 순식간에 자산을 불리세요.</li>
+                <li>원하는 수익금이 차오르면 [즉시 수익 청산]을 눌러 자금을 확보합니다. 단, 예측과 반대로 크게 움직여 원금이 마이너스가 되면 투자금이 공중분해(강제 청산)됩니다!</li>
+            </ul>
+            <button class="close-btn" onclick="closeModal()">게임 시작하기</button>
+        </div>
+    </div>
+
     <script>
         const socket = io();
+        let currentPrice = 80.00;
+        let myFuture = null; // 나의 실시간 선물 포지션 데이터
         
-        // --- 실시간 차트 초기화 세팅 ---
+        function openModal() { document.getElementById('helpModal').style.display = 'flex'; }
+        function closeModal() { document.getElementById('helpModal').style.display = 'none'; }
+
+        // --- 실시간 차트 세팅 ---
         const ctx = document.getElementById('priceChart').getContext('2d');
         const priceData = [];
         const labelData = [];
@@ -100,32 +161,73 @@
             }
         });
 
-        // --- 서버 이벤트 수신 처리 ---
+        // --- 서버 데이터 연동 수신 ---
         socket.on('initPlayer', (data) => {
             document.getElementById('my-balance').innerText = data.balance.toLocaleString();
+            
             if (data.currentBet) {
-                document.getElementById('my-bet-status').innerText = `${data.currentBet}에 ${data.betAmount}포인트`;
+                document.getElementById('my-bet-status').innerText = `${data.currentBet}에 ${data.betAmount.toLocaleString()}포인트`;
+            } else {
+                document.getElementById('my-bet-status').innerText = '없음';
+            }
+
+            // 선물 거래 상태 동기화 UI 제어
+            myFuture = data.futurePosition ? data : null;
+            if (myFuture) {
+                document.getElementById('future-inactive').style.display = 'none';
+                document.getElementById('future-active').style.display = 'block';
+                document.getElementById('fut-type').innerText = myFuture.futurePosition;
+                document.getElementById('fut-type').style.color = myFuture.futurePosition === 'LONG' ? '#22c55e' : '#ef4444';
+                document.getElementById('fut-entry').innerText = myFuture.futureEntryPrice.toFixed(2);
+                updateFutureDisplay();
+            } else {
+                document.getElementById('future-inactive').style.display = 'block';
+                document.getElementById('future-active').style.display = 'none';
             }
         });
 
+        // 실시간 선물 손익 수치 실시간 계산 및 브라우저 출력
+        function updateFutureDisplay() {
+            if (!myFuture) return;
+            const entry = myFuture.futureEntryPrice;
+            const diffPercent = (currentPrice - entry) / entry;
+            const leverage = 3;
+            let profitPercent = diffPercent * leverage;
+            if (myFuture.futurePosition === 'SHORT') {
+                profitPercent = -diffPercent * leverage;
+            }
+            const profit = Math.floor(myFuture.futureMargin * profitPercent);
+            const profElement = document.getElementById('fut-profit');
+            
+            profElement.innerText = `${profit >= 0 ? '+' : ''}${profit.toLocaleString()} 포인트 (${(profitPercent * 100).toFixed(1)}%)`;
+            profElement.style.color = profit >= 0 ? '#22c55e' : '#ef4444';
+        }
+
         socket.on('marketUpdate', (data) => {
-            // 유가 및 긴장도 화면 업데이트
+            currentPrice = parseFloat(data.oilPrice);
             document.getElementById('oil-price').innerText = data.oilPrice;
             document.getElementById('tension-meter').innerText = data.tensionLevel;
+            document.getElementById('round-timer').innerText = data.timer;
             
-            // 실시간 베팅율 비율 노출
-            document.getElementById('pool-yes').innerText = data.bettingPool.YES;
-            document.getElementById('pool-no').innerText = data.bettingPool.NO;
+            // 실시간 실효 배당률 계산 및 화면 송출
+            const poolYes = data.bettingPool.YES;
+            const poolNo = data.bettingPool.NO;
+            const total = poolYes + poolNo;
+            
+            document.getElementById('odds-yes').innerText = (total / poolYes).toFixed(2);
+            document.getElementById('odds-no').innerText = (total / poolNo).toFixed(2);
 
-            // 실시간 차트 갱신 (최대 20개 노출)
+            // 선물 변동성 실시간 화면 반영
+            updateFutureDisplay();
+
+            // 차트 드로잉
             const now = new Date();
             const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-            
             if (priceData.length > 20) {
                 priceData.shift();
                 labelData.shift();
             }
-            priceData.push(parseFloat(data.oilPrice));
+            priceData.push(currentPrice);
             labelData.push(timeStr);
             chart.update();
         });
@@ -142,16 +244,27 @@
             alert(msg);
         });
 
-        // --- 유저 행동 송신 처리 ---
+        // --- 송신 행동 스크립트 ---
         function influence(faction) {
             socket.emit('influence', faction);
         }
 
         function placeBet(type) {
-            const amount = parseInt(prompt("베팅할 포인트를 입력하세요:", "1000"));
+            const amount = parseInt(prompt(`${type} 베팅에 참여할 포인트를 입력하세요:`, "1000"));
             if (amount) {
                 socket.emit('placeBet', { type, amount });
             }
+        }
+
+        function openFuture(position) {
+            const margin = parseInt(prompt(`[WTI 3배 선물 마진 거래] 투자할 마진(증거금) 포인트를 입력하세요:`, "2000"));
+            if (margin) {
+                socket.emit('openFuture', { position, margin });
+            }
+        }
+
+        function closeFuture() {
+            socket.emit('closeFuture');
         }
     </script>
 </body>
