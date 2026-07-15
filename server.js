@@ -6,112 +6,176 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*" }
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
-// 정적 파일 제공 (index.html을 서비스하기 위함)
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// --- 게임 물리/경제 엔진 변수 ---
-let currentOilPrice = 80.00; // 배럴당 기본 유가 ($)
-let tensionLevel = 0;        // 이란 vs 미국 긴장도 (0 ~ 100)
-let newsHistory = ["게임이 시작되었습니다. 호르무즈 해협은 평화롭습니다."];
+// 임시 디렉토리 서빙용 (public 폴더가 없을 경우 루트에서 index.html 제공)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-// 예측 마켓 베팅 현황 (상대 베팅 풀 방식)
-let bettingPool = {
-  YES: 1, // 유가 폭등($100 돌파)에 건 총 포인트 (단, 0 나누기 방지용 기본값 1)
-  NO: 1   // 유가 안정($100 미만 유지)에 건 총 포인트
-};
+// 게임 데이터 상태 관리
+let players = {};
+let oilPrice = 70.00; // 배럴당 시작가 (달러)
+let priceHistory = [70.00];
 
-// 유저 데이터 세션 (메모리 저장 - 실제 서비스 시 DB 연결 필요)
-const players = {};
+// 배당률 및 베팅 시스템 데이터
+let totalBets = { UP: 0, DOWN: 0 };
+let leverageBets = { UP: {}, DOWN: {} }; // 레버리지 베팅 유저 기록
 
-// --- 3초마다 자동으로 돌아가는 시장 경제 사이클 ---
+// 가격 변동 함수 (매 5초마다 변동)
 setInterval(() => {
-  // 1. 긴장도(Tension)에 비례한 유가 자연 변동 공식 (소폭의 노이즈 추가)
-  const noise = (Math.random() - 0.5) * 2; // -1 ~ +1 사이 무작위 변동
-  const tensionEffect = tensionLevel * 0.3; // 긴장도가 높을수록 유가 압박 상승
-  
-  // 유가 점진적 적용
-  currentOilPrice = Math.max(40, currentOilPrice + noise + (tensionEffect * 0.1));
-  
-  // 자연스러운 긴장도 감소 (유저 행동이 없으면 시간이 지남에 따라 점차 진정됨)
-  if (tensionLevel > 0) {
-    tensionLevel = Math.max(0, tensionLevel - 0.5);
-  }
+    const change = (Math.random() * 4 - 2).toFixed(2); // -2$ ~ +2$ 변동
+    const previousPrice = oilPrice;
+    oilPrice = parseFloat((oilPrice + parseFloat(change)).toFixed(2));
+    if (oilPrice < 10) oilPrice = 10; // 최소 가격 제한
 
-  // 모든 유저에게 동기화 데이터 전송
-  io.emit('marketUpdate', {
-    oilPrice: currentOilPrice.toFixed(2),
-    tensionLevel: Math.round(tensionLevel),
-    bettingPool: bettingPool,
-    news: newsHistory.slice(-5) // 최근 뉴스 5개만 전송
-  });
-}, 3000);
+    priceHistory.push(oilPrice);
+    if (priceHistory.length > 20) priceHistory.shift();
 
-// --- 실시간 유저 소통 (Websocket) ---
+    // 방향 확인 (UP 또는 DOWN)
+    const direction = oilPrice > previousPrice ? "UP" : "DOWN";
+
+    // 1. 일반 베팅 정산 처리
+    let totalWinBets = direction === "UP" ? totalBets.UP : totalBets.DOWN;
+    let totalLoseBets = direction === "UP" ? totalBets.DOWN : totalBets.UP;
+    
+    // 배당금 지급 비율 계산
+    let dividendRate = 1.9; // 기본 배당률
+    if (totalWinBets > 0 && totalLoseBets > 0) {
+        dividendRate = parseFloat((1 + (totalLoseBets / totalWinBets) * 0.9).toFixed(2));
+    }
+
+    // 2. 레버리지(3배) 정산 처리
+    const priceChangePercent = ((oilPrice - previousPrice) / previousPrice); // 가격 변동률
+
+    // 각 플레이어별 자산 정산
+    Object.keys(players).forEach(id => {
+        let p = players[id];
+        let balanceChanged = false;
+
+        // 일반 베팅 정산
+        if (p.currentBet && p.currentBet.type === direction) {
+            const reward = Math.floor(p.currentBet.amount * dividendRate);
+            p.points += reward;
+            p.lastResult = `성공! +${reward}포인트 수령 (배당률: ${dividendRate}x)`;
+            balanceChanged = true;
+        } else if (p.currentBet) {
+            p.lastResult = `실패... -${p.currentBet.amount}포인트 손실`;
+            balanceChanged = true;
+        }
+
+        // 레버리지(3배) 베팅 정산
+        if (p.leverageBet) {
+            const leverage = p.leverageBet.leverage; // 3
+            const betAmount = p.leverageBet.amount;
+            let profitPercent = priceChangePercent * leverage; // 변동률 * 3
+
+            if (p.leverageBet.type === "DOWN") {
+                profitPercent = -profitPercent; // 숏(DOWN)은 가격이 떨어져야 이득
+            }
+
+            const profitOrLoss = Math.floor(betAmount * profitPercent);
+            p.points += profitOrLoss;
+
+            if (p.points <= 0) {
+                p.points = 0; // 파산 처리
+                p.lastResult = `💥 레버리지 마진콜 발생! (청산 완료)`;
+            } else {
+                p.lastResult = `레버리지(${leverage}x) 결과: ${profitOrLoss >= 0 ? '+' : ''}${profitOrLoss}포인트 반영`;
+            }
+            p.leverageBet = null; // 레버리지 베팅 초기화
+            balanceChanged = true;
+        }
+
+        if (balanceChanged) {
+            p.currentBet = null; // 일반 베팅 초기화
+            io.to(id).emit('updateBalance', { points: p.points, lastResult: p.lastResult });
+        }
+    });
+
+    // 베팅 판 초기화 및 배당률 재계산
+    totalBets = { UP: 0, DOWN: 0 };
+    const rates = calculateOdds();
+
+    io.emit('priceUpdate', { 
+        price: oilPrice, 
+        history: priceHistory,
+        rates: rates
+    });
+}, 5000);
+
+// 실시간 배당률 계산 함수
+function calculateOdds() {
+    const total = totalBets.UP + totalBets.DOWN;
+    if (total === 0) return { UP: 1.9, DOWN: 1.9 };
+
+    const upRate = totalBets.UP > 0 ? (1 + (totalBets.DOWN / totalBets.UP) * 0.9).toFixed(2) : 1.9;
+    const downRate = totalBets.DOWN > 0 ? (1 + (totalBets.UP / totalBets.DOWN) * 0.9).toFixed(2) : 1.9;
+
+    return {
+        UP: parseFloat(upRate),
+        DOWN: parseFloat(downRate)
+    };
+}
+
 io.on('connection', (socket) => {
-  console.log(`유저 접속: ${socket.id}`);
-  
-  // 신규 유저 초기 자산 지급
-  players[socket.id] = {
-    balance: 10000, // 초기 자산 10,000 포인트
-    currentBet: null,
-    betAmount: 0
-  };
+    console.log(`유저 접속: ${socket.id}`);
 
-  // 접속한 유저에게 본인 상태 전송
-  socket.emit('initPlayer', players[socket.id]);
+    // 새 유저 등록
+    players[socket.id] = {
+        points: 10000, // 시작 포인트
+        currentBet: null,
+        leverageBet: null,
+        lastResult: ''
+    };
 
-  // [액션 1] 지정학적 개입 (미국/이란 행동 버튼 클릭 시)
-  socket.on('influence', (faction) => {
-    let change = 0;
-    let message = "";
+    // 최초 접속 시 기본 데이터 전송
+    socket.emit('init', {
+        price: oilPrice,
+        points: players[socket.id].points,
+        history: priceHistory,
+        rates: calculateOdds()
+    });
 
-    if (faction === 'US') {
-      change = 8;
-      tensionLevel = Math.min(100, tensionLevel + change);
-      message = "📢 [미국] " + socket.id.substring(0, 5) + " 지휘관이 호르무즈 통행료 20% 관세를 추가 위협했습니다! (유가 상승 압박)";
-    } else if (faction === 'IRAN') {
-      change = 12;
-      tensionLevel = Math.min(100, tensionLevel + change);
-      message = "📢 [이란] " + socket.id.substring(0, 5) + " 지휘관이 호르무즈 해협 해상 훈련을 개시했습니다! (유가 급등 압박)";
-    }
+    // 일반 베팅 신청 수신
+    socket.on('placeBet', (data) => {
+        const p = players[socket.id];
+        if (!p || p.points < data.amount || p.currentBet || p.leverageBet) return;
 
-    newsHistory.push(message);
-    io.emit('newsAlert', message);
-  });
+        p.points -= data.amount;
+        p.currentBet = { type: data.type, amount: data.amount };
+        
+        if (data.type === 'UP') totalBets.UP += data.amount;
+        if (data.type === 'DOWN') totalBets.DOWN += data.amount;
 
-  // [액션 2] 예측 마켓 베팅 참여
-  socket.on('placeBet', ({ type, amount }) => {
-    const player = players[socket.id];
-    if (!player) return;
+        socket.emit('updateBalance', { points: p.points, lastResult: '베팅 완료! 다음 가격 변동을 기다리는 중...' });
+        io.emit('betUpdate', calculateOdds()); // 전체 유저에게 실시간 배당률 갱신
+    });
 
-    if (player.balance < amount || amount <= 0) {
-      socket.emit('errorMsg', '잔액이 부족하거나 올바르지 않은 금액입니다.');
-      return;
-    }
+    // 레버리지(3배) 베팅 신청 수신
+    socket.on('placeLeverageBet', (data) => {
+        const p = players[socket.id];
+        if (!p || p.points < data.amount || p.currentBet || p.leverageBet) return;
 
-    // 기존 베팅이 있다면 추가 누적
-    player.balance -= amount;
-    player.betAmount += amount;
-    player.currentBet = type;
+        p.points -= data.amount;
+        p.leverageBet = { type: data.type, amount: data.amount, leverage: 3 };
 
-    bettingPool[type] += amount;
+        socket.emit('updateBalance', { points: p.points, lastResult: '3배 마진 거래 시작! 다음 가격 변동 감시 중...' });
+    });
 
-    socket.emit('initPlayer', player); // 유저 개별 잔액 업데이트
-    io.emit('poolUpdate', bettingPool); // 전체 베팅 풀 실시간 동기화
-    newsHistory.push(`🗳️ 누군가 ${type}에 ${amount} 포인트를 베팅했습니다!`);
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`유저 퇴장: ${socket.id}`);
-    delete players[socket.id];
-  });
+    socket.on('disconnect', () => {
+        console.log(`유저 퇴장: ${socket.id}`);
+        delete players[socket.id];
+    });
 });
 
-// 포트 설정 (Render 배포 환경 포트 대응)
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-  console.log(`정세 시뮬레이터 서버 기동 중... 포트: ${PORT}`);
+    console.log(`정유 시뮬레이터 서버 기동 중... 포트: ${PORT}`);
 });
