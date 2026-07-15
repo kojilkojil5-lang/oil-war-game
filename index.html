@@ -44,32 +44,15 @@
             <!-- 실시간 오일 가격판 -->
             <div class="panel">
                 <h3>실시간 국제유가 (WTI)</h3>
-                <div class="price-text">$<span id="oil-price">80.00</span></div>
-                <p>지정학 긴장 지수: <span id="tension-meter" style="color:#f59e0b; font-weight:bold;">0</span>%</p>
-                <p>라운드 타임어택: <span id="round-timer" style="color:#38bdf8; font-weight:bold;">180</span>초 남음</p>
+                <div class="price-text">$<span id="oil-price">70.00</span></div>
+                <p style="color: #a1a1aa; font-size: 0.9rem;">매 5초마다 국제 정세에 따라 급변합니다.</p>
             </div>
             
             <!-- 플레이어 금융 정보 및 실시간 마진 거래소 -->
             <div class="panel">
                 <h3>내 헤지펀드 계좌</h3>
                 <div class="price-text" style="color: #60a5fa;">$<span id="my-balance">10,000</span></div>
-                <p>배틀 참여: <span id="my-bet-status" style="font-weight:bold; color:#fbbf24;">없음</span></p>
-                <hr style="border-color:#2d2d34; margin: 10px 0;">
-                
-                <!-- 실시간 선물 마진 거래 UI -->
-                <h4>📊 3배 마진 실시간 선물 (WTI Future)</h4>
-                <div id="future-inactive">
-                    <button class="btn" style="background-color:#22c55e; color:white; padding:6px 12px; font-size:0.85rem;" onclick="openFuture('LONG')">🟢 3X 롱(상승) 진입</button>
-                    <button class="btn" style="background-color:#ef4444; color:white; padding:6px 12px; font-size:0.85rem;" onclick="openFuture('SHORT')">🔴 3X 숏(하락) 진입</button>
-                </div>
-                <div id="future-active" style="display:none;">
-                    <p style="font-size:0.9rem; margin: 5px 0;">
-                        포지션: <span id="fut-type" style="font-weight:bold;"></span> | 
-                        진입가: $<span id="fut-entry"></span> | 
-                        평가손익: <span id="fut-profit" style="font-weight:bold;">$0</span>
-                    </p>
-                    <button class="btn" style="background-color:#a1a1aa; color:#121214; padding:5px 10px; font-size:0.8rem;" onclick="closeFuture()">💰 즉시 수익 청산</button>
-                </div>
+                <p>최근 처리 상태: <span id="my-bet-status" style="font-weight:bold; color:#fbbf24;">대기 중</span></p>
             </div>
         </div>
 
@@ -78,32 +61,37 @@
             <canvas id="priceChart" style="width: 100%; height: 240px;"></canvas>
         </div>
 
-        <!-- 정치 개입 및 예측 마켓 컨트롤러 -->
+        <!-- 예측 마켓 및 3배 선물 마진 거래 컨트롤러 -->
         <div class="dashboard">
+            <!-- 1단계: 일반 1X 배당 배팅 -->
             <div class="panel">
-                <h3>🌐 군사 및 외교 개입</h3>
-                <p style="font-size:0.8rem; color:#a1a1aa;">개입 시 긴장 지수가 올라 유가가 급격히 자극받습니다.</p>
-                <button class="btn btn-us" onclick="influence('US')">미국: 관세 압박 실행</button>
-                <button class="btn btn-iran" onclick="influence('IRAN')">이란: 해상 훈련 개시</button>
-            </div>
-            <div class="panel">
-                <h3>🗳️ 유가 $100 돌파 예측 배틀</h3>
-                <p style="font-size:0.8rem; color:#a1a1aa;">유가가 3분 내로 $100를 넘기면 YES, 안 넘으면 NO가 승리합니다.</p>
+                <h3>🗳️ 다음 변동 가격 예측 (일반 배팅)</h3>
+                <p style="font-size:0.8rem; color:#a1a1aa;">다음 5초 뒤 가격이 오를지 내릴지 예측하여 지분을 모읍니다.</p>
                 
                 <div style="margin-bottom: 15px;">
-                    <button class="btn btn-bet" onclick="placeBet('YES')">돌파한다 (YES) 베팅</button>
-                    <div class="odds-badge">실시간 돌파 배당: <span id="odds-yes">1.00</span>배</div>
+                    <button class="btn btn-bet" onclick="placeBet('UP')">📈 상승(UP) 예측</button>
+                    <div class="odds-badge">실시간 배당: <span id="odds-up">1.90</span>배</div>
                 </div>
                 <div>
-                    <button class="btn btn-bet" style="background-color:#6b7280; color:white;" onclick="placeBet('NO')">유지된다 (NO) 베팅</button>
-                    <div class="odds-badge" style="color:#a1a1aa;">실시간 유지 배당: <span id="odds-no">1.00</span>배</div>
+                    <button class="btn btn-bet" style="background-color:#6b7280; color:white;" onclick="placeBet('DOWN')">📉 하락(DOWN) 예측</button>
+                    <div class="odds-badge" style="color:#a1a1aa;">실시간 배당: <span id="odds-down">1.90</span>배</div>
+                </div>
+            </div>
+
+            <!-- 2단계: 3배 마진 실시간 선물 거래 -->
+            <div class="panel">
+                <h3>📊 3배 마진 원유 선물 거래 (WTI Future)</h3>
+                <p style="font-size:0.8rem; color:#a1a1aa;">5초 뒤 변동률의 3배가 계좌에 즉시 정산됩니다. (파산 시 강제 청산)</p>
+                <div style="margin-top: 20px;">
+                    <button class="btn" style="background-color:#22c55e; color:white;" onclick="placeLeverageBet('UP')">🟢 3X 롱 (상승 베팅)</button>
+                    <button class="btn" style="background-color:#ef4444; color:white;" onclick="placeLeverageBet('DOWN')">🔴 3X 숏 (하락 베팅)</button>
                 </div>
             </div>
         </div>
 
         <!-- 뉴스 피드 -->
         <div class="panel">
-            <h3>🔴 실시간 정세 타임라인</h3>
+            <h3>🔴 마켓 실시간 오더북 & 히스토리</h3>
             <div id="news-box"></div>
         </div>
     </div>
@@ -111,17 +99,17 @@
     <!-- 게임 도움말 모달 팝업 -->
     <div id="helpModal" class="modal" style="display: flex;">
         <div class="modal-content">
-            <h2>🦅 <블랙 골드> 금융 전략 전력 가이드</h2>
+            <h2>🦅 <블랙 골드> 금융 전략 가이드</h2>
             <hr style="border-color: #2d2d34; margin-bottom: 15px;">
-            <p><strong>1단계: 예측 배틀 (중장기 투자)</strong></p>
+            <p><strong>1. 다음 가격 예측 (일반 베팅)</strong></p>
             <ul>
-                <li>라운드 시간(180초) 안에 유가가 $100를 돌파할지(YES), 유지할지(NO)에 걸어주세요.</li>
-                <li>한쪽에 베팅이 쏠릴수록 반대쪽 배당률이 실시간으로 최대치까지 불어납니다.</li>
+                <li>매 5초마다 변하는 국제 유가가 직전 가격보다 오를지(UP), 내릴지(DOWN)에 걸어보세요.</li>
+                <li>유저들이 한쪽에 돈을 몰아 베팅할수록, 반대 세력의 배당률이 실시간으로 강력하게 불어납니다!</li>
             </ul>
-            <p><strong>2단계: 3배 레버리지 선물 (실시간 단타)</strong></p>
+            <p><strong>2. 3배 마진 거래 (선물)</strong></p>
             <ul>
-                <li>유가의 미세한 등락 흐름에 맞춰 <strong>롱(상승 베팅)</strong> 또는 <strong>숏(하락 베팅)</strong>을 쳐서 순식간에 자산을 불리세요.</li>
-                <li>원하는 수익금이 차오르면 [즉시 수익 청산]을 눌러 자금을 확보합니다. 단, 예측과 반대로 크게 움직여 원금이 마이너스가 되면 투자금이 공중분해(강제 청산)됩니다!</li>
+                <li>단순 홀짝 배당이 아닙니다. 다음 변동되는 유가의 상승/하락 % 비율에 정확히 <strong>3배의 레버리지</strong>를 곱해 자산이 요동칩니다.</li>
+                <li>예측에 크게 성공하면 자산이 폭발적으로 늘어나지만, 반대로 흘러 원금이 0 이하가 되면 전액 청산당합니다!</li>
             </ul>
             <button class="close-btn" onclick="closeModal()">게임 시작하기</button>
         </div>
@@ -129,8 +117,7 @@
 
     <script>
         const socket = io();
-        let currentPrice = 80.00;
-        let myFuture = null; // 나의 실시간 선물 포지션 데이터
+        let currentPrice = 70.00;
         
         function openModal() { document.getElementById('helpModal').style.display = 'flex'; }
         function closeModal() { document.getElementById('helpModal').style.display = 'none'; }
@@ -161,66 +148,36 @@
             }
         });
 
-        // --- 서버 데이터 연동 수신 ---
-        socket.on('initPlayer', (data) => {
-            document.getElementById('my-balance').innerText = data.balance.toLocaleString();
-            
-            if (data.currentBet) {
-                document.getElementById('my-bet-status').innerText = `${data.currentBet}에 ${data.betAmount.toLocaleString()}포인트`;
-            } else {
-                document.getElementById('my-bet-status').innerText = '없음';
-            }
+        // --- 웹소켓 수신 인터페이스 ---
+        
+        // 1. 초기 정보 동기화
+        socket.on('init', (data) => {
+            document.getElementById('my-balance').innerText = data.points.toLocaleString();
+            document.getElementById('oil-price').innerText = data.price.toFixed(2);
+            currentPrice = data.price;
 
-            // 선물 거래 상태 동기화 UI 제어
-            myFuture = data.futurePosition ? data : null;
-            if (myFuture) {
-                document.getElementById('future-inactive').style.display = 'none';
-                document.getElementById('future-active').style.display = 'block';
-                document.getElementById('fut-type').innerText = myFuture.futurePosition;
-                document.getElementById('fut-type').style.color = myFuture.futurePosition === 'LONG' ? '#22c55e' : '#ef4444';
-                document.getElementById('fut-entry').innerText = myFuture.futureEntryPrice.toFixed(2);
-                updateFutureDisplay();
-            } else {
-                document.getElementById('future-inactive').style.display = 'block';
-                document.getElementById('future-active').style.display = 'none';
-            }
+            // 차트 히스토리 복원
+            priceData.push(...data.history);
+            data.history.forEach((val, i) => {
+                labelData.push(`T-${data.history.length - i}`);
+            });
+            chart.update();
+
+            // 배당률 갱신
+            document.getElementById('odds-up').innerText = data.rates.UP.toFixed(2);
+            document.getElementById('odds-down').innerText = data.rates.DOWN.toFixed(2);
         });
 
-        // 실시간 선물 손익 수치 실시간 계산 및 브라우저 출력
-        function updateFutureDisplay() {
-            if (!myFuture) return;
-            const entry = myFuture.futureEntryPrice;
-            const diffPercent = (currentPrice - entry) / entry;
-            const leverage = 3;
-            let profitPercent = diffPercent * leverage;
-            if (myFuture.futurePosition === 'SHORT') {
-                profitPercent = -diffPercent * leverage;
-            }
-            const profit = Math.floor(myFuture.futureMargin * profitPercent);
-            const profElement = document.getElementById('fut-profit');
+        // 2. 가격 변동 및 배당률 실시간 업데이트
+        socket.on('priceUpdate', (data) => {
+            currentPrice = data.price;
+            document.getElementById('oil-price').innerText = data.price.toFixed(2);
             
-            profElement.innerText = `${profit >= 0 ? '+' : ''}${profit.toLocaleString()} 포인트 (${(profitPercent * 100).toFixed(1)}%)`;
-            profElement.style.color = profit >= 0 ? '#22c55e' : '#ef4444';
-        }
+            // 실시간 배당률 갱신
+            document.getElementById('odds-up').innerText = data.rates.UP.toFixed(2);
+            document.getElementById('odds-down').innerText = data.rates.DOWN.toFixed(2);
 
-        socket.on('marketUpdate', (data) => {
-            currentPrice = parseFloat(data.oilPrice);
-            document.getElementById('oil-price').innerText = data.oilPrice;
-            document.getElementById('tension-meter').innerText = data.tensionLevel;
-            document.getElementById('round-timer').innerText = data.timer;
-            
-            // 실시간 실효 배당률 계산 및 화면 송출
-            const poolYes = data.bettingPool.YES;
-            const poolNo = data.bettingPool.NO;
-            const total = poolYes + poolNo;
-            
-            document.getElementById('odds-yes').innerText = (total / poolYes).toFixed(2);
-            document.getElementById('odds-no').innerText = (total / poolNo).toFixed(2);
-
-            // 선물 변동성 실시간 화면 반영
-            updateFutureDisplay();
-
-            // 차트 드로잉
+            // 차트 갱신
             const now = new Date();
             const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
             if (priceData.length > 20) {
@@ -232,39 +189,55 @@
             chart.update();
         });
 
+        // 3. 베팅 상황에 따른 배당률 동적 실시간 반영
+        socket.on('betUpdate', (rates) => {
+            document.getElementById('odds-up').innerText = rates.UP.toFixed(2);
+            document.getElementById('odds-down').innerText = rates.DOWN.toFixed(2);
+        });
+
+        // 4. 내 지갑 상태 변동 업데이트
+        socket.on('updateBalance', (data) => {
+            document.getElementById('my-balance').innerText = data.points.toLocaleString();
+            document.getElementById('my-bet-status').innerText = data.lastResult;
+            
+            // 정산 결과 피드에 기록
+            addLog(data.lastResult);
+        });
+
+        // 5. 서버 알림창
         socket.on('newsAlert', (msg) => {
-            const newsBox = document.getElementById('news-box');
-            const item = document.createElement('div');
-            item.className = 'news-item';
-            item.innerText = msg;
-            newsBox.prepend(item);
+            addLog(msg);
         });
 
         socket.on('errorMsg', (msg) => {
             alert(msg);
         });
 
-        // --- 송신 행동 스크립트 ---
-        function influence(faction) {
-            socket.emit('influence', faction);
-        }
-
+        // --- 송신 함수 ---
+        
+        // 일반 1배수 예측 배팅 신청
         function placeBet(type) {
-            const amount = parseInt(prompt(`${type} 베팅에 참여할 포인트를 입력하세요:`, "1000"));
-            if (amount) {
+            const amount = parseInt(prompt(`[일반 예측] ${type} 방향에 배팅할 금액을 입력하세요:`, "1000"));
+            if (amount && !isNaN(amount)) {
                 socket.emit('placeBet', { type, amount });
             }
         }
 
-        function openFuture(position) {
-            const margin = parseInt(prompt(`[WTI 3배 선물 마진 거래] 투자할 마진(증거금) 포인트를 입력하세요:`, "2000"));
-            if (margin) {
-                socket.emit('openFuture', { position, margin });
+        // 3배 레버리지 마진 거래 신청
+        function placeLeverageBet(type) {
+            const amount = parseInt(prompt(`[3X 마진 거래] ${type} 방향에 투자할 마진 금액을 입력하세요:`, "2000"));
+            if (amount && !isNaN(amount)) {
+                socket.emit('placeLeverageBet', { type, amount });
             }
         }
 
-        function closeFuture() {
-            socket.emit('closeFuture');
+        // 하단 뉴스 박스 로그 기록기
+        function addLog(msg) {
+            const newsBox = document.getElementById('news-box');
+            const item = document.createElement('div');
+            item.className = 'news-item';
+            item.innerText = msg;
+            newsBox.prepend(item);
         }
     </script>
 </body>
